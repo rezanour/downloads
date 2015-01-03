@@ -1,0 +1,48 @@
+﻿Build started 1/2/2015 9:26:28 PM.
+     1>Project "C:\Src\Git\Sample2D\Sample2D\Sample2D.vcxproj" on node 2 (Rebuild target(s)).
+     1>FxCompile:
+         C:\Program Files (x86)\Windows Kits\8.1\bin\x86\fxc.exe /nologo /E"main" /T vs_4_0 /Fh "SpriteBatch2VS.h" /Fo "C:\Src\Git\Sample2D\Release\SpriteBatch2VS.cso" /Vn "SpriteBatch2VS" SpriteBatch2VS.hlsl 
+         compilation header save succeeded; see C:\Src\Git\Sample2D\Sample2D\SpriteBatch2VS.h
+         compilation object save succeeded; see C:\Src\Git\Sample2D\Release\SpriteBatch2VS.cso
+         C:\Program Files (x86)\Windows Kits\8.1\bin\x86\fxc.exe /nologo /E"main" /T ps_4_0 /Fh "SpriteBatchPS.h" /Fo "C:\Src\Git\Sample2D\Release\SpriteBatchPS.cso" /Vn "SpriteBatchPS" SpriteBatchPS.hlsl 
+         compilation header save succeeded; see C:\Src\Git\Sample2D\Sample2D\SpriteBatchPS.h
+         compilation object save succeeded; see C:\Src\Git\Sample2D\Release\SpriteBatchPS.cso
+         C:\Program Files (x86)\Windows Kits\8.1\bin\x86\fxc.exe /nologo /E"main" /T vs_4_0 /Fh "SpriteBatchVS.h" /Fo "C:\Src\Git\Sample2D\Release\SpriteBatchVS.cso" /Vn "SpriteBatchVS" SpriteBatchVS.hlsl 
+         compilation header save succeeded; see C:\Src\Git\Sample2D\Sample2D\SpriteBatchVS.h
+         compilation object save succeeded; see C:\Src\Git\Sample2D\Release\SpriteBatchVS.cso
+       ClCompile:
+         C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\bin\CL.exe /c /Zi /nologo /W4 /WX /sdl /O2 /Oi /Oy- /GL /D WIN32 /D NDEBUG /D _WINDOWS /D _UNICODE /D UNICODE /Gm- /EHsc /MD /GS /Gy /fp:precise /Zc:wchar_t /Zc:forScope /Yc"Precomp.h" /Fp"Release\Sample2D.pch" /Fo"Release\\" /Fd"Release\vc120.pdb" /Gd /TP /analyze- /errorReport:prompt Precomp.cpp
+         Precomp.cpp
+         C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\bin\CL.exe /c /Zi /nologo /W4 /WX /sdl /O2 /Oi /Oy- /GL /D WIN32 /D NDEBUG /D _WINDOWS /D _UNICODE /D UNICODE /Gm- /EHsc /MD /GS /Gy /fp:precise /Zc:wchar_t /Zc:forScope /Yu"Precomp.h" /Fp"Release\Sample2D.pch" /Fo"Release\\" /Fd"Release\vc120.pdb" /Gd /TP /analyze- /errorReport:prompt Application.cpp Body.cpp Collision.cpp Game.cpp GameObject.cpp Manifold.cpp PhysicsWorld.cpp Shape.cpp SpriteBatch.cpp SpriteBatch2.cpp Texture.cpp
+         Application.cpp
+         Body.cpp
+         Collision.cpp
+         Game.cpp
+         GameObject.cpp
+         Manifold.cpp
+         PhysicsWorld.cpp
+         Shape.cpp
+         SpriteBatch.cpp
+         SpriteBatch2.cpp
+         Texture.cpp
+       Link:
+         C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\bin\link.exe /ERRORREPORT:PROMPT /OUT:"C:\Src\Git\Sample2D\Release\Sample2D.exe" /INCREMENTAL:NO /NOLOGO d3d11.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:\Src\Git\Sample2D\Release\Sample2D.pdb" /SUBSYSTEM:WINDOWS /OPT:REF /OPT:ICF /LTCG /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"C:\Src\Git\Sample2D\Release\Sample2D.lib" /MACHINE:X86 /SAFESEH Release\Application.obj
+         Release\Body.obj
+         Release\Collision.obj
+         Release\Game.obj
+         Release\GameObject.obj
+         Release\Manifold.obj
+         Release\PhysicsWorld.obj
+         Release\Precomp.obj
+         Release\Shape.obj
+         Release\SpriteBatch.obj
+         Release\SpriteBatch2.obj
+         Release\Texture.obj
+         Generating code
+         Finished generating code
+         Sample2D.vcxproj -> C:\Src\Git\Sample2D\Release\Sample2D.exe
+     1>Done Building Project "C:\Src\Git\Sample2D\Sample2D\Sample2D.vcxproj" (Rebuild target(s)).
+
+Build succeeded.
+
+Time Elapsed 00:00:02.76
