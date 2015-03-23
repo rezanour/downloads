@@ -1,0 +1,28 @@
+﻿Build started 3/22/2015 12:24:54 PM.
+     1>Project "C:\Src\Git\GPURaytracer\DirectXTex\DirectXTex\DirectXTex_Desktop_2013.vcxproj" on node 3 (Build target(s)).
+     1>Lib:
+         C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\bin\x86_amd64\Lib.exe /OUT:"C:\Src\Git\GPURaytracer\x64\Debug\DirectXTex.lib" /NOLOGO /MACHINE:X64 Bin\Desktop_2013\x64\Debug\BC.obj
+         Bin\Desktop_2013\x64\Debug\BC4BC5.obj
+         Bin\Desktop_2013\x64\Debug\BC6HBC7.obj
+         Bin\Desktop_2013\x64\Debug\BCDirectCompute.obj
+         Bin\Desktop_2013\x64\Debug\DirectXTexCompress.obj
+         Bin\Desktop_2013\x64\Debug\DirectXTexCompressGPU.obj
+         Bin\Desktop_2013\x64\Debug\DirectXTexConvert.obj
+         Bin\Desktop_2013\x64\Debug\DirectXTexD3D11.obj
+         Bin\Desktop_2013\x64\Debug\DirectXTexDDS.obj
+         Bin\Desktop_2013\x64\Debug\DirectXTexFlipRotate.obj
+         Bin\Desktop_2013\x64\Debug\DirectXTexImage.obj
+         Bin\Desktop_2013\x64\Debug\DirectXTexMipMaps.obj
+         Bin\Desktop_2013\x64\Debug\DirectXTexMisc.obj
+         Bin\Desktop_2013\x64\Debug\DirectXTexNormalMaps.obj
+         Bin\Desktop_2013\x64\Debug\DirectXTexPMAlpha.obj
+         Bin\Desktop_2013\x64\Debug\DirectXTexResize.obj
+         Bin\Desktop_2013\x64\Debug\DirectXTexTGA.obj
+         Bin\Desktop_2013\x64\Debug\DirectXTexUtil.obj
+         Bin\Desktop_2013\x64\Debug\DirectXTexWIC.obj
+         DirectXTex_Desktop_2013.vcxproj -> C:\Src\Git\GPURaytracer\x64\Debug\DirectXTex.lib
+     1>Done Building Project "C:\Src\Git\GPURaytracer\DirectXTex\DirectXTex\DirectXTex_Desktop_2013.vcxproj" (Build target(s)).
+
+Build succeeded.
+
+Time Elapsed 00:00:00.24
