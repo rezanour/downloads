@@ -93,23 +93,32 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int)
             }
 
             // Input
+            bool invalidate = false;
             if (GetAsyncKeyState(VK_RIGHT) & 0x8000)
             {
                 cameraWorldTransform.r[3] = XMVectorAdd(cameraWorldTransform.r[3], XMVectorSet(0.125f, 0.f, 0.f, 0.f));
+                invalidate = true;
             }
             if (GetAsyncKeyState(VK_LEFT) & 0x8000)
             {
                 cameraWorldTransform.r[3] = XMVectorAdd(cameraWorldTransform.r[3], XMVectorSet(-0.125f, 0.f, 0.f, 0.f));
+                invalidate = true;
             }
             if (GetAsyncKeyState(VK_UP) & 0x8000)
             {
                 cameraWorldTransform.r[3] = XMVectorAdd(cameraWorldTransform.r[3], XMVectorSet(0.f, 0.f, 0.125f, 0.f));
+                invalidate = true;
             }
             if (GetAsyncKeyState(VK_DOWN) & 0x8000)
             {
                 cameraWorldTransform.r[3] = XMVectorAdd(cameraWorldTransform.r[3], XMVectorSet(0.f, 0.f, -0.125f, 0.f));
+                invalidate = true;
             }
 
+            if (invalidate)
+            {
+                raytracer->Invalidate();
+            }
             raytracer->Render(cameraWorldTransform);
 
             swprintf_s(caption, L"CPU Raytracer: Resolution: %dx%d, Threads: %d, FPS: %3.2f", ScreenWidth, ScreenHeight, raytracer->GetNumThreads(), frameRate);

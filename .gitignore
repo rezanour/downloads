@@ -41,3 +41,19 @@ Icon
 Network Trash Folder
 Temporary Items
 .apdisk
+
+*.sdf
+*.ipch
+*.suo
+CPURaytracer/x64/Debug/Debug.obj
+*.obj
+CPURaytracer/x64/Debug/Raytracer.ilk
+*.log
+CPURaytracer/x64/Debug/Raytracer.pch
+*.pdb
+CPURaytracer/x64/Debug/Raytracer.tlog/cl.command.1.tlog
+*.tlog
+*.idb
+CPURaytracer/x64/Release/Raytracer.exe
+*.pch
+CPURaytracer/x64/Debug/Raytracer.exe

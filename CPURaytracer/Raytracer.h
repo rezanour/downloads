@@ -12,6 +12,8 @@ public:
     int GetNumThreads() const { return NumThreads; }
 
     void SetFOV(float horizFovRadians);
+
+    void Invalidate();
     bool Render(FXMMATRIX cameraWorldTransform);
 
 private:
@@ -51,6 +53,7 @@ private:
 
     // Compute shading for a given point
     XMVECTOR ShadePoint(FXMVECTOR dir, const RayIntersection& intersection, int depth = 0);
+    XMVECTOR PickRandomVectorInHemisphere(FXMVECTOR normal);
     uint32_t ConvertColorToUint(FXMVECTOR color);
 
 private:
@@ -60,6 +63,7 @@ private:
     int Width;
     int Height;
     uint32_t* Pixels;
+    XMFLOAT4* Accum; // RGB + numSamples
 
     // For computing eye rays
     float HalfWidth;
@@ -78,6 +82,7 @@ private:
     {
         float Reflectiveness;
         XMFLOAT3 Color;
+        XMFLOAT3 Emission;
         int Texture; // -1 means no texture
     };
     SurfaceProp* SurfaceProps;
@@ -91,20 +96,9 @@ private:
     Texture* Textures;
     int NumTextures;
 
-    XMFLOAT3 AmbientLight;
-
-    struct PointLight
-    {
-        XMFLOAT3 Position;
-        XMFLOAT3 Color;
-        float Radius;
-    };
-
-    PointLight* PointLights;
-    int NumPointLights;
-
     // Passes/frames
-    static const int NumBounces = 2;
+    static const int NumBounces = 3;
+    static const int TileSize = 1;
 
     // Multithreading
     struct ThreadStartInfo
@@ -116,14 +110,15 @@ private:
     struct RenderRequest
     {
         XMFLOAT4X4 CameraWorld;
-        int StartRow;
-        int NumRows;
+        int minX, maxX;
+        int minY, maxY;
     };
 
     HANDLE* Threads;
-    HANDLE* StartEvents;
-    HANDLE* FinishEvents;
+    HANDLE StartEvent;
+    HANDLE FinishEvent;
     RenderRequest* RenderJobs;
+    volatile long NumRenderJobs;
     HANDLE ShutdownEvent;
     int NumThreads;
 };
