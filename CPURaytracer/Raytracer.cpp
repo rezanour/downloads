@@ -1,18 +1,19 @@
 #include "Precomp.h"
 #include "Raytracer.h"
 #include "Debug.h"
-
-#include <wincodec.h>
-#include <wrl.h>
-using namespace Microsoft::WRL;
+#include <time.h>
 
 #if defined (_DEBUG)
-#define DISABLE_MULTITHREADED_RENDERING
+//#define DISABLE_MULTITHREADED_RENDERING
 #endif
+
+//#define USE_SINGLE_BOX
 
 Raytracer* Raytracer::Create(HWND window)
 {
-    Raytracer* raytracer = new (std::nothrow) Raytracer(window);
+    srand((int)time(nullptr));
+
+    Raytracer* raytracer = new Raytracer(window);
     if (raytracer)
     {
         if (!raytracer->Initialize())
@@ -28,23 +29,14 @@ Raytracer::Raytracer(HWND hwnd)
     : Window(hwnd)
     , BackBufferDC(nullptr)
     , Pixels(nullptr)
-    , Accum(nullptr)
     , hFov(0.f)
     , DistToProjPlane(0.f)
-    , Vertices(nullptr)
-    , TexCoords(nullptr)
-    , SurfaceProps(nullptr)
     , NumVertices(0)
     , NumTriangles(0)
-    , Threads(nullptr)
-    , StartEvent(nullptr)
-    , FinishEvent(nullptr)
-    , RenderJobs(nullptr)
     , NumRenderJobs(0)
-    , ShutdownEvent(nullptr)
     , NumThreads(0)
-    , Textures(nullptr)
     , NumTextures(0)
+    , BlurEnabled(true)
 {
     assert(Window);
 
@@ -59,61 +51,27 @@ Raytracer::Raytracer(HWND hwnd)
 
 Raytracer::~Raytracer()
 {
-    if (ShutdownEvent)
+    if (ShutdownEvent.IsValid())
     {
-        SetEvent(ShutdownEvent);
-        WaitForMultipleObjects(NumThreads, Threads, TRUE, INFINITE);
-        CloseHandle(ShutdownEvent);
-        ShutdownEvent = nullptr;
+        SetEvent(ShutdownEvent.Get());
+        WaitForMultipleObjects(NumThreads, Threads.get(), TRUE, INFINITE);
     }
-
-    delete[] RenderJobs;
-    RenderJobs = nullptr;
 
     for (int i = 0; i < NumThreads; ++i)
     {
-        if (Threads && Threads[i])
+        if (Threads[i])
         {
             CloseHandle(Threads[i]);
         }
     }
-    delete[] Threads;
-    Threads = nullptr;
-
-    if (StartEvent)
-    {
-        CloseHandle(StartEvent);
-        StartEvent = nullptr;
-    }
-
-    if (FinishEvent)
-    {
-        CloseHandle(FinishEvent);
-        FinishEvent = nullptr;
-    }
 
     Pixels = nullptr;
-
-    delete[] Accum;
-    Accum = nullptr;
 
     if (BackBufferDC)
     {
         DeleteDC(BackBufferDC);
         BackBufferDC = nullptr;
     }
-
-    delete[] Vertices;
-    Vertices = nullptr;
-
-    delete[] TexCoords;
-    TexCoords = nullptr;
-
-    delete[] SurfaceProps;
-    SurfaceProps = nullptr;
-
-    delete[] Textures;
-    Textures = nullptr;
 }
 
 void Raytracer::SetFOV(float horizFovRadians)
@@ -124,9 +82,10 @@ void Raytracer::SetFOV(float horizFovRadians)
     DistToProjPlane = (Width * 0.5f) / denom;
 }
 
-void Raytracer::Invalidate()
+void Raytracer::Clear()
 {
-    Clear();
+    // Clear out the buffer
+    ZeroMemory(Accum.get(), Width * Height * sizeof(XMFLOAT4));
 }
 
 bool Raytracer::Render(FXMMATRIX cameraWorldTransform)
@@ -145,9 +104,9 @@ bool Raytracer::Render(FXMMATRIX cameraWorldTransform)
         }
     }
     NumRenderJobs = numJobs;
-    SetEvent(StartEvent);
-    WaitForSingleObject(FinishEvent, INFINITE);
-    ResetEvent(StartEvent);
+    SetEvent(StartEvent.Get());
+    WaitForSingleObject(FinishEvent.Get(), INFINITE);
+    ResetEvent(StartEvent.Get());
 
     return Present();
 }
@@ -199,13 +158,13 @@ bool Raytracer::Initialize()
     ReleaseDC(Window, hdc);
 
     // Create accum buffer
-    Accum = new (std::nothrow) XMFLOAT4[Width * Height];
+    Accum.reset(new XMFLOAT4[Width * Height]);
     if (!Accum)
     {
         LogError(L"Failed to allocate accumulation buffer.");
         return false;
     }
-    ZeroMemory(Accum, sizeof(XMFLOAT4) * Width * Height);
+    Clear();
 
     if (!GenerateTestScene())
     {
@@ -217,29 +176,29 @@ bool Raytracer::Initialize()
     // Create render threads
     //
 
-    RenderJobs = new (std::nothrow) RenderRequest[(Width / TileSize) * (Height / TileSize)];
+    RenderJobs.reset(new RenderRequest[(Width / TileSize) * (Height / TileSize)]);
     if (!RenderJobs)
     {
         LogError(L"Failed to allocate render job list.");
         return false;
     }
 
-    StartEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-    if (!StartEvent)
+    StartEvent.Attach(CreateEvent(nullptr, TRUE, FALSE, nullptr));
+    if (!StartEvent.IsValid())
     {
         LogError(L"Failed to create start event.");
         return false;
     }
 
-    FinishEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-    if (!FinishEvent)
+    FinishEvent.Attach(CreateEvent(nullptr, FALSE, FALSE, nullptr));
+    if (!FinishEvent.IsValid())
     {
         LogError(L"Failed to create finish event.");
         return false;
     }
 
-    ShutdownEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-    if (!ShutdownEvent)
+    ShutdownEvent.Attach(CreateEvent(nullptr, TRUE, FALSE, nullptr));
+    if (!ShutdownEvent.IsValid())
     {
         LogError(L"Failed to create shutdown event.");
         return false;
@@ -247,39 +206,26 @@ bool Raytracer::Initialize()
 
     // Determine how many processors/cores the machine has
 #if !defined(DISABLE_MULTITHREADED_RENDERING)
-    DWORD procCount = GetActiveProcessorCount(ALL_PROCESSOR_GROUPS);
-#else
-    DWORD procCount = 1;
-#endif
-
     // Since our rendering doesn't stall on I/O other than memory loads, more
     // threads than cores won't help.
-    NumThreads = procCount;
+    NumThreads = GetActiveProcessorCount(ALL_PROCESSOR_GROUPS);
+#else
+    NumThreads = 1;
+#endif
 
-    Threads = new (std::nothrow) HANDLE[NumThreads];
+    Threads.reset(new HANDLE[NumThreads]);
     if (!Threads)
     {
         LogError(L"Failed to allocate thread list.");
         return false;
     }
-    ZeroMemory(Threads, sizeof(HANDLE) * NumThreads);
 
     for (int i = 0; i < NumThreads; ++i)
     {
-        ThreadStartInfo* startInfo = new (std::nothrow) ThreadStartInfo;
-        if (!startInfo)
-        {
-            LogError(L"Failed to allocate thread start info.");
-            return false;
-        }
-
-        startInfo->This = this;
-        startInfo->ThreadIndex = i;
-        Threads[i] = CreateThread(nullptr, 0, RenderThreadProc, startInfo, 0, nullptr);
+        Threads[i] = CreateThread(nullptr, 0, RenderThreadProc, this, 0, nullptr);
         if (!Threads[i])
         {
             LogError(L"Failed to create thread.");
-            delete startInfo;
             return false;
         }
     }
@@ -287,20 +233,29 @@ bool Raytracer::Initialize()
     return true;
 }
 
-void Raytracer::Clear()
-{
-    // Clear out the buffer
-//    ZeroMemory(Pixels, Width * Height * sizeof(uint32_t));
-    ZeroMemory(Accum, Width * Height * sizeof(XMFLOAT4));
-}
-
 bool Raytracer::Present()
 {
     // Resolve Accum buffer
-    for (int i = 0; i < Width * Height; ++i)
+    for (int y = 0; y < Height; ++y)
     {
-        XMVECTOR color = XMLoadFloat4(&Accum[i]) / Accum[i].w;
-        Pixels[i] = ConvertColorToUint(color);
+        for (int x = 0; x < Width; ++x)
+        {
+            int i = y * Width + x;
+            XMVECTOR color = XMLoadFloat4(&Accum[i]) / max(Accum[i].w, 1.f);
+
+            if (BlurEnabled)
+            {
+                int iRight = y * Width + min(x + 1, Width - 1);
+                int iBottom = min(y + 1, Height - 1) * Width + x;
+                int iRightBottom = min(y + 1, Height - 1) * Width + min(x + 1, Width - 1);
+                XMVECTOR right = XMLoadFloat4(&Accum[iRight]) / max(Accum[iRight].w, 1.f);
+                XMVECTOR bottom = XMLoadFloat4(&Accum[iBottom]) / max(Accum[iBottom].w, 1.f);
+                XMVECTOR rightBottom = XMLoadFloat4(&Accum[iRightBottom]) / max(Accum[iRightBottom].w, 1.f);
+                color = (color + right + bottom + rightBottom) * 0.25f;
+            }
+
+            Pixels[i] = ConvertColorToUint(color);
+        }
     }
 
     HDC hdc = GetDC(Window);
@@ -385,8 +340,8 @@ static int AddCube(
     // Top
     numVertices += AddQuad(p, p + w, p + w + u, p + u, vertices + numVertices, texCoords + numVertices);
 
-    // Bottom
-    numVertices += AddQuad(p + v, p + v + u, p + v + u + w, p + v + w, vertices + numVertices, texCoords + numVertices);
+    // Bottom (leave off since they're never visible in our test scene)
+    //numVertices += AddQuad(p + v, p + v + u, p + v + u + w, p + v + w, vertices + numVertices, texCoords + numVertices);
 
     return numVertices;
 }
@@ -395,7 +350,7 @@ bool Raytracer::GenerateTestScene()
 {
     // Load sample texture
     NumTextures = 1;
-    Textures = new (std::nothrow) Texture[NumTextures];
+    Textures.reset(new Texture[NumTextures]);
     if (!Textures)
     {
         LogError(L"Failed to allocate textures.");
@@ -449,7 +404,7 @@ bool Raytracer::GenerateTestScene()
     destBitmap->GetSize(&width, &height);
     Textures[0].Width = width;
     Textures[0].Height = height;
-    Textures[0].Pixels = new (std::nothrow) uint32_t[width * height];
+    Textures[0].Pixels.reset(new uint32_t[width * height]);
     if (!Textures[0].Pixels)
     {
         CoUninitialize();
@@ -457,7 +412,7 @@ bool Raytracer::GenerateTestScene()
         return false;
     }
 
-    hr = destBitmap->CopyPixels(nullptr, width * sizeof(uint32_t), width * height * sizeof(uint32_t), (BYTE*)Textures[0].Pixels);
+    hr = destBitmap->CopyPixels(nullptr, width * sizeof(uint32_t), width * height * sizeof(uint32_t), (BYTE*)Textures[0].Pixels.get());
     if (FAILED(hr))
     {
         CoUninitialize();
@@ -468,26 +423,31 @@ bool Raytracer::GenerateTestScene()
     CoUninitialize();
 
     //
-    // Create Cornell box test scene. 5 walls (6 verts each), 2 cubes (36 verts each)
+    // Create Cornell box test scene. 6 walls (6 verts each), 2 cubes (30 verts each)
     //
-    NumVertices = 114;
+
+#if defined(USE_SINGLE_BOX)
+    NumVertices = 72;
+#else
+    NumVertices = 102;
+#endif
     NumTriangles = NumVertices / 3;
 
-    Vertices = new (std::nothrow) XMFLOAT3[NumVertices];
+    Vertices.reset(new XMFLOAT3[NumVertices]);
     if (!Vertices)
     {
         LogError(L"Failed to allocate vertices for scene.");
         return false;
     }
 
-    TexCoords = new (std::nothrow) XMFLOAT2[NumVertices];
+    TexCoords.reset(new XMFLOAT2[NumVertices]);
     if (!TexCoords)
     {
         LogError(L"Failed to allocate texture coords for scene.");
         return false;
     }
 
-    SurfaceProps = new (std::nothrow) SurfaceProp[NumTriangles];
+    SurfaceProps.reset(new SurfaceProp[NumTriangles]);
     if (!SurfaceProps)
     {
         LogError(L"Failed to create surface properties for scene.");
@@ -509,7 +469,6 @@ bool Raytracer::GenerateTestScene()
 
     for (int i = 0; i < 2; ++i)
     {
-        SurfaceProps[numTris].Reflectiveness = 1.f;
         SurfaceProps[numTris].Color = XMFLOAT3(1.f, 0.f, 0.f);
         ++numTris;
     }
@@ -521,7 +480,6 @@ bool Raytracer::GenerateTestScene()
 
     for (int i = 0; i < 2; ++i)
     {
-        SurfaceProps[numTris].Reflectiveness = 0.f;
         SurfaceProps[numTris].Color = XMFLOAT3(0.f, 1.f, 0.f);
         ++numTris;
     }
@@ -533,7 +491,6 @@ bool Raytracer::GenerateTestScene()
 
     for (int i = 0; i < 2; ++i)
     {
-        SurfaceProps[numTris].Reflectiveness = 0.f;
         SurfaceProps[numTris].Color = XMFLOAT3(1.f, 1.f, 1.f);
         ++numTris;
     }
@@ -545,7 +502,6 @@ bool Raytracer::GenerateTestScene()
 
     for (int i = 0; i < 2; ++i)
     {
-        SurfaceProps[numTris].Reflectiveness = 0.f;
         SurfaceProps[numTris].Color = XMFLOAT3(1.f, 1.f, 1.f);
         ++numTris;
     }
@@ -557,7 +513,6 @@ bool Raytracer::GenerateTestScene()
 
     for (int i = 0; i < 2; ++i)
     {
-        SurfaceProps[numTris].Reflectiveness = 0.f;
         SurfaceProps[numTris].Color = XMFLOAT3(1.f, 1.f, 1.f);
         ++numTris;
     }
@@ -569,49 +524,61 @@ bool Raytracer::GenerateTestScene()
 
     for (int i = 0; i < 2; ++i)
     {
-        SurfaceProps[numTris].Reflectiveness = 0.f;
         SurfaceProps[numTris].Color = XMFLOAT3(1.f, 1.f, 1.f);
         ++numTris;
     }
 
     // top ceiling light
-    numVerts += AddQuad(XMVectorSet(-0.5f, 2.495f, 1.5f, 1.f), XMVectorSet(0.5f, 2.495f, 1.5f, 1.f),
-        XMVectorSet(0.5f, 2.495f, 3.5f, 1.f), XMVectorSet(-0.5f, 2.495f, 3.5f, 1.f),
+    numVerts += AddQuad(XMVectorSet(-0.75f, 2.495f, 1.75f, 1.f), XMVectorSet(0.75f, 2.495f, 1.75f, 1.f),
+        XMVectorSet(0.75f, 2.495f, 3.25f, 1.f), XMVectorSet(-0.75f, 2.495f, 3.25f, 1.f),
         &Vertices[numVerts], &TexCoords[numVerts]);
 
     for (int i = 0; i < 2; ++i)
     {
-        SurfaceProps[numTris].Reflectiveness = 0.f;
         SurfaceProps[numTris].Color = XMFLOAT3(1.f, 1.f, 1.f);
         SurfaceProps[numTris].Emission = XMFLOAT3(1.f, 0.836f, 0.664f); // warm room light
-        XMStoreFloat3(&SurfaceProps[numTris].Emission, XMLoadFloat3(&SurfaceProps[numTris].Emission) * 1.5f); // Pump up the light
         ++numTris;
     }
 
+#if defined (USE_SINGLE_BOX)
+
     // tall box in the back, rotated facing 1, 0, -1
-    numVerts += AddCube(XMVectorSet(-1.2f, 0.5f, 2.25f, 1.f), XMVectorSet(1.5f, 0.f, 0.4f, 1.f),
-        XMVectorSet(0.f, -3.f, 0.f, 1.f), XMVectorSet(-0.4f, 0.f, 1.5f, 1.f),
+    numVerts += AddCube(XMVectorSet(0.f, -1.f, 1.f, 1.f), XMVectorSet(1.f, 0.f, 1.f, 1.f),
+        XMVectorSet(0.f, -1.5f, 0.f, 1.f), XMVectorSet(-1.f, 0.f, 1.f, 1.f),
         &Vertices[numVerts], &TexCoords[numVerts]);
 
-    for (int i = 0; i < 12; ++i)
+    for (int i = 0; i < 10; ++i)
     {
-        SurfaceProps[numTris].Reflectiveness = 0.3f;
         SurfaceProps[numTris].Color = XMFLOAT3(1.f, 1.f, 1.f);
-        SurfaceProps[numTris].Texture = 0;
+        ++numTris;
+    }
+
+#else
+
+    // tall box in the back, rotated facing 1, 0, -1
+    numVerts += AddCube(XMVectorSet(-1.2f, 0.5f, 2.25f, 1.f), XMVectorSet(1.5f, 0.f, 0.8f, 1.f),
+        XMVectorSet(0.f, -3.f, 0.f, 1.f), XMVectorSet(-0.8f, 0.f, 1.5f, 1.f),
+        &Vertices[numVerts], &TexCoords[numVerts]);
+
+    for (int i = 0; i < 10; ++i)
+    {
+        SurfaceProps[numTris].Color = XMFLOAT3(1.f, 1.f, 1.f);
+        //SurfaceProps[numTris].Texture = 0;
         ++numTris;
     }
 
     // small box in the front, rotated facing -1, 0, 1
-    numVerts += AddCube(XMVectorSet(0.f, -1.0f, 0.5f, 1.f), XMVectorSet(1.25f, 0.f, -0.4f, 1.f),
-        XMVectorSet(0.f, -1.5f, 0.f, 1.f), XMVectorSet(0.4f, 0.f, 1.25f, 1.f),
+    numVerts += AddCube(XMVectorSet(-0.5f, -1.0f, 1.f, 1.f), XMVectorSet(1.5f, 0.f, -0.8f, 1.f),
+        XMVectorSet(0.f, -1.5f, 0.f, 1.f), XMVectorSet(0.8f, 0.f, 1.5f, 1.f),
         &Vertices[numVerts], &TexCoords[numVerts]);
 
-    for (int i = 0; i < 12; ++i)
+    for (int i = 0; i < 10; ++i)
     {
-        SurfaceProps[numTris].Reflectiveness = 0.f;
         SurfaceProps[numTris].Color = XMFLOAT3(1.f, 1.f, 1.f);
         ++numTris;
     }
+
+#endif
 
     assert(numVerts == NumVertices);
     assert(numTris == NumTriangles);
@@ -621,9 +588,9 @@ bool Raytracer::GenerateTestScene()
 
 DWORD CALLBACK Raytracer::RenderThreadProc(PVOID data)
 {
-    ThreadStartInfo* startInfo = (ThreadStartInfo*)data;
+    Raytracer* This = (Raytracer*)data;
 
-    HANDLE handles[] = { startInfo->This->ShutdownEvent, startInfo->This->StartEvent };
+    HANDLE handles[] = { This->ShutdownEvent.Get(), This->StartEvent.Get() };
     for (;;)
     {
         if (WaitForMultipleObjects(_countof(handles), handles, FALSE, INFINITE) == WAIT_OBJECT_0)
@@ -633,27 +600,26 @@ DWORD CALLBACK Raytracer::RenderThreadProc(PVOID data)
         }
 
         // Grab a tile
-        long jobIndex = InterlockedDecrement(&startInfo->This->NumRenderJobs);
+        long jobIndex = InterlockedDecrement(&This->NumRenderJobs);
         if (jobIndex < 0)
         {
             // All the jobs are gone, nothing to do
             continue;
         }
 
-        startInfo->This->ProcessRenderJob(jobIndex);
+        This->ProcessRenderJob(jobIndex);
 
         if (jobIndex == 0)
         {
             // Was the last job, signal finish
-            SetEvent(startInfo->This->FinishEvent);
+            SetEvent(This->FinishEvent.Get());
         }
     }
 
-    delete startInfo;
     return 0;
 }
 
-void Raytracer::ProcessRenderJob(int index)
+void Raytracer::ProcessRenderJob(long index)
 {
     RenderRequest& request = RenderJobs[index];
 
@@ -675,7 +641,7 @@ void Raytracer::ProcessRenderJob(int index)
             RayIntersection intersection;
             if (TraceRay(cameraWorldTransform.r[3], dir, &intersection))
             {
-                XMVECTOR newSample = ShadePoint(dir, intersection);
+                XMVECTOR newSample = ComputeRadiance(dir, intersection);
                 if (XMVectorGetX(XMVector3LengthEst(newSample)) > 0.0001f)
                 {
                     newSample = XMVectorSetW(newSample, 1.f);
@@ -687,6 +653,12 @@ void Raytracer::ProcessRenderJob(int index)
     }
 }
 
+// Get random normalized float [-1, 1]
+static float randf()
+{
+    return (float)rand() / (float)RAND_MAX * 2.f - 1.f;
+}
+
 XMVECTOR Raytracer::PickRandomVectorInHemisphere(FXMVECTOR normal)
 {
     // TODO: Use BRDF to drive distribution
@@ -696,19 +668,19 @@ XMVECTOR Raytracer::PickRandomVectorInHemisphere(FXMVECTOR normal)
         tangent = XMVector3Cross(normal, XMVectorSet(1, 0, 0, 0));
     }
     XMVECTOR bitangent = XMVector3Cross(tangent, normal);
-    XMVECTOR newDir = 0.75f * normal + (rand() / (float)RAND_MAX * 2.f - 1.f) * tangent +
-        (rand() / (float)RAND_MAX * 2.f - 1.f) * bitangent;
+    XMVECTOR newDir = (normal * fabsf(randf())) + (tangent * randf() * randf()) + (bitangent * randf() * randf());
 
     return XMVector3Normalize(newDir);
 }
 
-XMVECTOR Raytracer::ShadePoint(FXMVECTOR dir, const RayIntersection& intersection, int depth)
+XMVECTOR Raytracer::ComputeRadiance(FXMVECTOR dir, const RayIntersection& intersection, int depth)
 {
     if (depth == NumBounces)
     {
         return XMVectorZero();
     }
 
+    // dir is useful for computing specular or other view dependent factors. Not currently used
     UNREFERENCED_PARAMETER(dir);
 
     // Compute base color
@@ -737,8 +709,16 @@ XMVECTOR Raytracer::ShadePoint(FXMVECTOR dir, const RayIntersection& intersectio
 
     XMVECTOR emission = XMLoadFloat3(&props.Emission);
 
-    // Try up to 5 times to pick a direction that actually contributes light
-    for (int iTry = 0; iTry < 5; ++iTry)
+    // Try up to 4 times to see if we can get a valid sample
+    int numTries = 4;
+
+    // If surface has emission (gives off light), then no need to try multiple times
+    if (XMVectorGetX(XMVector3LengthEst(emission)) > 0.0001f)
+    {
+        numTries = 1;
+    }
+
+    for (int i = 0; i < numTries; ++i)
     {
         // Pick a random direction to bounce and compute contribution from that direction
         XMVECTOR newDir = PickRandomVectorInHemisphere(normal);
@@ -746,15 +726,11 @@ XMVECTOR Raytracer::ShadePoint(FXMVECTOR dir, const RayIntersection& intersectio
         RayIntersection test;
         if (TraceRay(p, newDir, &test))
         {
-            XMVECTOR irradiance = ShadePoint(newDir, test, depth + 1);
-            irradiance = irradiance * XMVectorGetX(XMVector3Dot(-newDir, XMLoadFloat3(&test.Normal)));
+            XMVECTOR radiance = ComputeRadiance(newDir, test, depth + 1);
+            radiance = radiance * XMVectorGetX(XMVector3Dot(-newDir, XMLoadFloat3(&test.Normal)));
+
             float nDotL = XMVectorGetX(XMVector3Dot(newDir, normal));
-            return emission + baseColor * (irradiance * nDotL);
-        }
-        else if (XMVectorGetX(XMVector3LengthEst(emission)) > 0.0001f)
-        {
-            // If it has emission, just use that instead of trying 5 times
-            break;
+            return emission + baseColor * (radiance * nDotL);
         }
     }
 
@@ -772,7 +748,7 @@ uint32_t Raytracer::ConvertColorToUint(FXMVECTOR color)
 
 bool Raytracer::TraceRay(FXMVECTOR start, FXMVECTOR dir, RayIntersection* intersection)
 {
-    // TODO: Improve with some sort of spatial data structure (eg. kd tree)
+    // TODO: Accelerate with some sort of spatial data structure (eg. kd tree)
     bool hitSomething = false;
     int numTriangles = NumVertices / 3;
     float nearest = FLT_MAX;
@@ -782,13 +758,6 @@ bool Raytracer::TraceRay(FXMVECTOR start, FXMVECTOR dir, RayIntersection* inters
     {
         if (RayTriangleIntersect(start, dir, i * 3, &test))
         {
-            // If not asking for intersection info, then first hit is
-            // enough to know we hit something, return
-            if (!intersection)
-            {
-                return true;
-            }
-
             if (test.Dist < nearest)
             {
                 nearest = test.Dist;
@@ -801,7 +770,7 @@ bool Raytracer::TraceRay(FXMVECTOR start, FXMVECTOR dir, RayIntersection* inters
     return hitSomething;
 }
 
-bool Raytracer::RayTriangleIntersect(FXMVECTOR start, FXMVECTOR dir, int startVertex, /* optional */ RayIntersection* intersection)
+bool Raytracer::RayTriangleIntersect(FXMVECTOR start, FXMVECTOR dir, int startVertex, RayIntersection* intersection)
 {
     XMVECTOR a = XMLoadFloat3(&Vertices[startVertex]);
     XMVECTOR b = XMLoadFloat3(&Vertices[startVertex + 1]);
@@ -826,46 +795,6 @@ bool Raytracer::RayTriangleIntersect(FXMVECTOR start, FXMVECTOR dir, int startVe
         return false;
     }
 
-#if 0
-    //
-    // Tetrahedron-based boolean ray/triangle collision test.
-    // Doesn't compute contact point or barycentric coordinates for interpolating.
-    //
-
-    // Form 3 new faces of tetrahedron by combining start with each edge of triangle.
-    // For each face, we just need it's outward facing normal. Note that we don't
-    // need the normals to be normalized, just the direction is enough.
-    XMVECTOR sa = XMVectorSubtract(a, start);
-    XMVECTOR sb = XMVectorSubtract(b, start);
-    XMVECTOR sc = XMVectorSubtract(c, start);
-    XMVECTOR n0 = XMVector3Cross(sa, sb);
-    XMVECTOR n1 = XMVector3Cross(sb, sc);
-    XMVECTOR n2 = XMVector3Cross(sc, sa);
-
-    // If the direction vector hits the triangle, then it must point into
-    // the halfspace regions within pseudo-tetrahedron (inside the 3 normals above)
-    if (XMVectorGetX(XMVector3Dot(dir, n0)) > 0)
-    {
-        // Outside of tetrahedron
-        return false;
-    }
-
-    if (XMVectorGetX(XMVector3Dot(dir, n1)) > 0)
-    {
-        // Outside of tetrahedron
-        return false;
-    }
-
-    if (XMVectorGetX(XMVector3Dot(dir, n2)) > 0)
-    {
-        // Outside of tetrahedron
-        return false;
-    }
-
-    // ray intersects triangle somewhere
-    return true;
-
-#else
     //
     // Standard barycentric approach: Find the intersection, P, with plane of triangle
     // then compute barycentric coordinates of the triangle. If they are all positive
@@ -904,20 +833,15 @@ bool Raytracer::RayTriangleIntersect(FXMVECTOR start, FXMVECTOR dir, int startVe
         return false;
     }
 
-    if (intersection)
-    {
-        float invNLen = 1.0f / XMVectorGetX(XMVector3Length(n));
-        assert(!_isnanf(invNLen));
-        intersection->Type = RayIntersection::IntersectionType::Triangle;
-        intersection->Dist = hyp;
-        XMStoreFloat3(&intersection->Point, p);
-        XMStoreFloat3(&intersection->Normal, XMVector3Normalize(n));
-        intersection->StartIndex = startVertex;
-        intersection->wA = XMVectorGetX(XMVector3Length(wA)) * invNLen;
-        intersection->wB = XMVectorGetX(XMVector3Length(wB)) * invNLen;
-        intersection->wC = XMVectorGetX(XMVector3Length(wC)) * invNLen;
-    }
+    float invNLen = 1.0f / XMVectorGetX(XMVector3Length(n));
+    assert(!_isnanf(invNLen));
+    intersection->Dist = hyp;
+    XMStoreFloat3(&intersection->Point, p);
+    XMStoreFloat3(&intersection->Normal, XMVector3Normalize(n));
+    intersection->StartIndex = startVertex;
+    intersection->wA = XMVectorGetX(XMVector3Length(wA)) * invNLen;
+    intersection->wB = XMVectorGetX(XMVector3Length(wB)) * invNLen;
+    intersection->wC = XMVectorGetX(XMVector3Length(wC)) * invNLen;
 
     return true;
-#endif
 }

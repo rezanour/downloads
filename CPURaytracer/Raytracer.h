@@ -13,7 +13,10 @@ public:
 
     void SetFOV(float horizFovRadians);
 
-    void Invalidate();
+    bool IsBlurEnabled() const { return BlurEnabled; }
+    void EnableBlur(bool enabled) { BlurEnabled = enabled; }
+
+    void Clear();
     bool Render(FXMMATRIX cameraWorldTransform);
 
 private:
@@ -24,11 +27,10 @@ private:
     Raytracer& operator= (const Raytracer&);
 
     bool Initialize();
-    void Clear();
     bool Present();
 
     static DWORD CALLBACK RenderThreadProc(PVOID data);
-    void ProcessRenderJob(int index);
+    void ProcessRenderJob(long index);
 
     // Create a test scene
     bool GenerateTestScene();
@@ -38,8 +40,6 @@ private:
     //
     struct RayIntersection
     {
-        enum class IntersectionType { Triangle };
-        IntersectionType Type;  // Type of intersection
         float Dist;             // Distance along ray before hit
         XMFLOAT3 Point;         // Point on triangle
         XMFLOAT3 Normal;        // Normal at contact
@@ -48,22 +48,25 @@ private:
     };
 
     // Trace a ray through the scene until it hits something. Return information about what it hit.
-    bool TraceRay(FXMVECTOR start, FXMVECTOR dir, /* optional */ RayIntersection* intersection);
-    bool RayTriangleIntersect(FXMVECTOR start, FXMVECTOR dir, int startVertex, /* optional */ RayIntersection* intersection);
+    bool TraceRay(FXMVECTOR start, FXMVECTOR dir, RayIntersection* intersection);
+    bool RayTriangleIntersect(FXMVECTOR start, FXMVECTOR dir, int startVertex, RayIntersection* intersection);
 
     // Compute shading for a given point
-    XMVECTOR ShadePoint(FXMVECTOR dir, const RayIntersection& intersection, int depth = 0);
+    XMVECTOR ComputeRadiance(FXMVECTOR dir, const RayIntersection& intersection, int depth = 0);
     XMVECTOR PickRandomVectorInHemisphere(FXMVECTOR normal);
     uint32_t ConvertColorToUint(FXMVECTOR color);
 
 private:
+    static const int NumBounces = 3;
+    static const int TileSize = 4;
+
     // Basic rendering/buffer
     HWND Window;
     HDC BackBufferDC;
     int Width;
     int Height;
     uint32_t* Pixels;
-    XMFLOAT4* Accum; // RGB + numSamples
+    std::unique_ptr<XMFLOAT4[]> Accum; // RGB + numSamples
 
     // For computing eye rays
     float HalfWidth;
@@ -72,41 +75,30 @@ private:
     float DistToProjPlane;
 
     // Simple scene as triangles for testing currently
-    XMFLOAT3* Vertices;
-    XMFLOAT2* TexCoords;
+    std::unique_ptr<XMFLOAT3[]> Vertices;
+    std::unique_ptr<XMFLOAT2[]> TexCoords;
     int NumVertices; // Must be multiple of 3
     int NumTriangles;
 
     // Triangle-wide properties
     struct SurfaceProp
     {
-        float Reflectiveness;
         XMFLOAT3 Color;
         XMFLOAT3 Emission;
         int Texture; // -1 means no texture
     };
-    SurfaceProp* SurfaceProps;
+    std::unique_ptr<SurfaceProp[]> SurfaceProps;
 
     struct Texture
     {
         int Width;
         int Height;
-        uint32_t* Pixels;
+        std::unique_ptr<uint32_t[]> Pixels;
     };
-    Texture* Textures;
+    std::unique_ptr<Texture[]> Textures;
     int NumTextures;
 
-    // Passes/frames
-    static const int NumBounces = 3;
-    static const int TileSize = 1;
-
     // Multithreading
-    struct ThreadStartInfo
-    {
-        Raytracer* This;
-        int ThreadIndex;
-    };
-
     struct RenderRequest
     {
         XMFLOAT4X4 CameraWorld;
@@ -114,11 +106,14 @@ private:
         int minY, maxY;
     };
 
-    HANDLE* Threads;
-    HANDLE StartEvent;
-    HANDLE FinishEvent;
-    RenderRequest* RenderJobs;
-    volatile long NumRenderJobs;
-    HANDLE ShutdownEvent;
+    Event StartEvent;
+    Event FinishEvent;
+    Event ShutdownEvent;
+    std::unique_ptr<HANDLE[]> Threads;
     int NumThreads;
+    std::unique_ptr<RenderRequest[]> RenderJobs;
+    volatile long NumRenderJobs;
+
+    // Blur
+    bool BlurEnabled;
 };

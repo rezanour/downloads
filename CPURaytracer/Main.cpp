@@ -5,8 +5,8 @@
 
 // Constants
 static const wchar_t ClassName[] = L"Raytracer Test Application";
-static const uint32_t ScreenWidth = 640;
-static const uint32_t ScreenHeight = 480;
+static const uint32_t ScreenWidth = 512;
+static const uint32_t ScreenHeight = 512;
 // Max FPS (expressed as 1/FPS). Prevent app from running faster than this, set to 0.f for no throttle
 static const float TargetFrameRate = 0.f;// 1.f / 60.f;
 
@@ -50,7 +50,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int)
     // Camera at the origin, looking along Z
     XMMATRIX cameraWorldTransform = XMMatrixIdentity();
     // Move camera back along -Z so that it's looking at the origin
-    cameraWorldTransform.r[3] = XMVectorSet(0.001f, 0, -5, 1);
+    cameraWorldTransform.r[3] = XMVectorSet(0.001f, 0, -4.f, 1);
 
     wchar_t caption[200] = {};
 
@@ -92,6 +92,11 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int)
                 break;
             }
 
+            if (GetAsyncKeyState(VK_SPACE) & 0x8000)
+            {
+                raytracer->EnableBlur(!raytracer->IsBlurEnabled());
+            }
+
             // Input
             bool invalidate = false;
             if (GetAsyncKeyState(VK_RIGHT) & 0x8000)
@@ -117,9 +122,19 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int)
 
             if (invalidate)
             {
-                raytracer->Invalidate();
+                raytracer->Clear();
             }
             raytracer->Render(cameraWorldTransform);
+
+            HDC hdc = GetDC(Window);
+
+            static const wchar_t InputText[] = L"Arrow Keys Move, Spacebar to toggle blur";
+            RECT rc = { 0, 0, 500, 50 };
+            SetBkMode(hdc, TRANSPARENT);
+            SetTextColor(hdc, RGB(255, 255, 255));
+            DrawText(hdc, InputText, _countof(InputText), &rc, 0);
+
+            ReleaseDC(Window, hdc);
 
             swprintf_s(caption, L"CPU Raytracer: Resolution: %dx%d, Threads: %d, FPS: %3.2f", ScreenWidth, ScreenHeight, raytracer->GetNumThreads(), frameRate);
             SetWindowText(Window, caption);

@@ -16,4 +16,10 @@
 #include <DirectXMath.h>
 using namespace DirectX;
 
-typedef unsigned char byte_t;
+// RAII wrappers
+#include <wrl.h>
+using namespace Microsoft::WRL;
+using namespace Microsoft::WRL::Wrappers;
+
+// Image loading library
+#include <wincodec.h>
