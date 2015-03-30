@@ -156,8 +156,16 @@ bool Raytracer::Initialize()
 
     assert(metadata.dimension == TEX_DIMENSION_TEXTURE2D && metadata.IsCubemap());
 
+    std::unique_ptr<ScratchImage> mipChain(new ScratchImage);
+    hr = GenerateMipMaps(image->GetImages(), image->GetImageCount(), metadata, TEX_FILTER_LINEAR | TEX_FILTER_FORCE_NON_WIC, 8, *mipChain);
+    if (FAILED(hr))
+    {
+        LogError(L"Failed to create mips for env texture.");
+        return false;
+    }
+
     ComPtr<ID3D11Resource> resource;
-    hr = CreateTextureEx(Device.Get(), image->GetImages(), image->GetImageCount(), metadata,
+    hr = CreateTextureEx(Device.Get(), mipChain->GetImages(), mipChain->GetImageCount(), mipChain->GetMetadata(),
                          D3D11_USAGE_DEFAULT, D3D11_BIND_SHADER_RESOURCE, 0,
                          D3D11_RESOURCE_MISC_TEXTURECUBE, false, &resource);
     if (FAILED(hr))
@@ -185,6 +193,7 @@ bool Raytracer::Initialize()
     sd.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
     sd.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
     sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    sd.MaxLOD = 8;
     hr = Device->CreateSamplerState(&sd, &EnvMapSampler);
     if (FAILED(hr))
     {
@@ -247,7 +256,7 @@ bool Raytracer::GenerateTestScene()
         obj.Color = XMFLOAT3(rand() / (float)RAND_MAX * 0.75f + 0.25f,
                              rand() / (float)RAND_MAX * 0.75f + 0.25f,
                              rand() / (float)RAND_MAX * 0.75f + 0.25f);
-        obj.Reflectiveness = 0.f;
+        obj.Reflectiveness = rand() / (float)RAND_MAX;
         spheres.push_back(obj);
     }
 

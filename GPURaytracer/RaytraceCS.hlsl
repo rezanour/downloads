@@ -142,6 +142,8 @@ float3 ComputeIrradiance(float3 viewDir, RayIntersection intersection)
     float3 totalLight = (float3)0;
     float3 reflection = (float3)0;
 
+    float reflectiveness = intersection.Sphere.Reflectiveness;
+
     //
     // Direct lighting
     //
@@ -162,12 +164,15 @@ float3 ComputeIrradiance(float3 viewDir, RayIntersection intersection)
             float nDotL = saturate(dot(normal, lightDir));
             totalLight += light.Color * nDotL;
 
-            // Specular
-            float3 lightRefl = reflect(-lightDir, normal);
-            float vDotR = dot(-viewDir, lightRefl);
-            if (vDotR > 0)
+            if (reflectiveness > 0.5f)
             {
-                totalLight += 20 * light.Color * pow(vDotR, 20);
+                // Specular
+                float3 lightRefl = reflect(-lightDir, normal);
+                float vDotR = dot(-viewDir, lightRefl);
+                if (vDotR > 0)
+                {
+                    totalLight += 20 * reflectiveness * light.Color * pow(vDotR, 20 * reflectiveness);
+                }
             }
         }
     }
@@ -176,7 +181,7 @@ float3 ComputeIrradiance(float3 viewDir, RayIntersection intersection)
     // Reflection
     //
     float3 reflDir = reflect(viewDir, normal);
-    if (RayTrace(position, reflDir, test))
+    if (reflectiveness > 0.5f && RayTrace(position, reflDir, test))
     {
         // TODO: Determine other object's properly shaded color
         reflection = test.Sphere.Color;
@@ -184,7 +189,7 @@ float3 ComputeIrradiance(float3 viewDir, RayIntersection intersection)
     else
     {
         // Reflect env
-        reflection = EnvTexture.SampleLevel(EnvSampler, reflDir, 0);
+        reflection = EnvTexture.SampleLevel(EnvSampler, reflDir, 8 * (1.f - reflectiveness));
     }
 
     // TODO: Was testing with hardcoded coefficients of diffuse vs reflectance. Should ideally be:
