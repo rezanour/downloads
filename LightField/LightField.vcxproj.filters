@@ -40,12 +40,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="SimpleVS.hlsl">
-      <Filter>Resource Files</Filter>
-    </FxCompile>
-    <FxCompile Include="SimplePS.hlsl">
-      <Filter>Resource Files</Filter>
-    </FxCompile>
     <FxCompile Include="RenderPlaneVS.hlsl">
       <Filter>Resource Files</Filter>
     </FxCompile>

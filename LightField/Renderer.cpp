@@ -1,8 +1,6 @@
 #include "Precomp.h"
 #include "Debug.h"
 #include "Renderer.h"
-#include "SimpleVS.h"
-#include "SimplePS.h"
 #include "RenderPlaneVS.h"
 #include "RenderSTPlanePS.h"
 #include "RenderUVPlanePS.h"
@@ -327,122 +325,27 @@ bool Renderer::CreateSimpleOutsideInLightField(LightField* lightField)
 {
     lightField->LightSlabs.clear();
 
-    // Create VB & IB for a colored cube
-    struct CubeVertex
-    {
-        XMFLOAT3 Position;
-        XMFLOAT3 Color;
-    };
+    std::unique_ptr<BasicEffect> basicEffect(new BasicEffect(Device.Get()));
+    basicEffect->SetPerPixelLighting(true);
+    basicEffect->SetLightingEnabled(true);
+    basicEffect->SetLightEnabled(0, true);
+    basicEffect->SetLightEnabled(1, true);
+    basicEffect->SetLightDirection(0, XMVector3Normalize(XMVectorSet(-0.25f, 0.5f, 1.f, 0.f)));
+    basicEffect->SetLightDiffuseColor(0, Colors::Blue);
+    basicEffect->SetLightSpecularColor(0, Colors::White);
+    basicEffect->SetLightDirection(1, XMVector3Normalize(XMVectorSet(1.f, -1.f, -1.f, 0.f)));
+    basicEffect->SetLightDiffuseColor(1, Colors::Blue);
+    basicEffect->SetSpecularPower(15.f);
+    basicEffect->SetWorld(XMMatrixIdentity());
 
-    CubeVertex vertices[] =
-    {
-        // Front
-        { XMFLOAT3(-0.5f, 0.5f, -0.5f), XMFLOAT3(1.f, 0.f, 0.f) },
-        { XMFLOAT3(0.5f, 0.5f, -0.5f), XMFLOAT3(0.f, 1.f, 0.f) },
-        { XMFLOAT3(0.5f, -0.5f, -0.5f), XMFLOAT3(0.f, 0.f, 1.f) },
-        { XMFLOAT3(-0.5f, -0.5f, -0.5f), XMFLOAT3(0.f, 1.f, 1.f) },
-        // Back
-        { XMFLOAT3(0.5f, 0.5f, 0.5f), XMFLOAT3(1.f, 0.f, 0.f) },
-        { XMFLOAT3(-0.5f, 0.5f, 0.5f), XMFLOAT3(0.f, 1.f, 0.f) },
-        { XMFLOAT3(-0.5f, -0.5f, 0.5f), XMFLOAT3(0.f, 0.f, 1.f) },
-        { XMFLOAT3(0.5f, -0.5f, 0.5f), XMFLOAT3(0.f, 1.f, 1.f) },
-    };
-
-    uint32_t indices[] =
-    {
-        0, 1, 2, 0, 2, 3,   // Front
-        4, 5, 6, 4, 6, 7,   // Back
-        5, 0, 3, 5, 3, 6,   // Left
-        1, 4, 7, 1, 7, 2,   // Right
-        5, 4, 1, 5, 1, 0,   // Top
-        3, 2, 7, 3, 7, 6,   // Bottom
-    };
-
-    D3D11_BUFFER_DESC bd = {};
-    bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-    bd.ByteWidth = sizeof(vertices);
-    bd.StructureByteStride = sizeof(CubeVertex);
-    bd.Usage = D3D11_USAGE_DEFAULT;
-
-    D3D11_SUBRESOURCE_DATA init = {};
-    init.pSysMem = vertices;
-    init.SysMemPitch = sizeof(vertices);
-    init.SysMemSlicePitch = init.SysMemPitch;
-
-    ComPtr<ID3D11Buffer> vb;
-    HRESULT hr = Device->CreateBuffer(&bd, &init, &vb);
-    if (FAILED(hr))
-    {
-        LogError(L"Failed to create test cube vertices.");
-        return false;
-    }
-
-    bd.BindFlags = D3D11_BIND_INDEX_BUFFER;
-    bd.ByteWidth = sizeof(indices);
-    bd.StructureByteStride = sizeof(uint32_t);
-
-    init.pSysMem = indices;
-    init.SysMemPitch = sizeof(indices);
-    init.SysMemSlicePitch = init.SysMemPitch;
-
-    ComPtr<ID3D11Buffer> ib;
-    hr = Device->CreateBuffer(&bd, &init, &ib);
-    if (FAILED(hr))
-    {
-        LogError(L"Failed to create test cube indices.");
-        return false;
-    }
-
-    // Create simple shaders to render it with
-    ComPtr<ID3D11VertexShader> vertexShader;
-    hr = Device->CreateVertexShader(SimpleVS, sizeof(SimpleVS), nullptr, &vertexShader);
-    if (FAILED(hr))
-    {
-        LogError(L"Failed to create test vertex shader.");
-        return false;
-    }
-
-    ComPtr<ID3D11PixelShader> pixelShader;
-    hr = Device->CreatePixelShader(SimplePS, sizeof(SimplePS), nullptr, &pixelShader);
-    if (FAILED(hr))
-    {
-        LogError(L"Failed to create test pixel shader.");
-        return false;
-    }
-
-    // Create input layout
-    D3D11_INPUT_ELEMENT_DESC elems[2] = {};
-    elems[0].Format = DXGI_FORMAT_R32G32B32_FLOAT;
-    elems[0].SemanticName = "POSITION";
-    elems[1].AlignedByteOffset = sizeof(float) * 3;
-    elems[1].Format = DXGI_FORMAT_R32G32B32_FLOAT;
-    elems[1].SemanticName = "COLOR";
+    std::unique_ptr<GeometricPrimitive> obj = GeometricPrimitive::CreateTeapot(Context.Get(), 2.f, 8, false);
+    //std::unique_ptr<GeometricPrimitive> obj = GeometricPrimitive::CreateSphere(Context.Get(), 1.f, 16, false);
+    //std::unique_ptr<GeometricPrimitive> obj = GeometricPrimitive::CreateCone(Context.Get(), 1.f, 1.f, 32, false);
+    //std::unique_ptr<GeometricPrimitive> obj = GeometricPrimitive::CreateCube(Context.Get(), 2.f, false);
+    //basicEffect->SetWorld(XMMatrixRotationX(XMConvertToRadians(90.0f)));
 
     ComPtr<ID3D11InputLayout> inputLayout;
-    hr = Device->CreateInputLayout(elems, _countof(elems), SimpleVS, sizeof(SimpleVS), &inputLayout);
-    if (FAILED(hr))
-    {
-        LogError(L"Failed to create test input layout.");
-        return false;
-    }
-
-    // Create constant buffer to hold viewpoints to render from
-    struct TestConstants
-    {
-        XMFLOAT4X4 ViewProjection;
-    };
-
-    bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-    bd.ByteWidth = sizeof(TestConstants);
-    bd.StructureByteStride = sizeof(TestConstants);
-
-    ComPtr<ID3D11Buffer> cb;
-    hr = Device->CreateBuffer(&bd, nullptr, &cb);
-    if (FAILED(hr))
-    {
-        LogError(L"Failed to create test constant buffer.");
-        return false;
-    }
+    obj->CreateInputLayout(basicEffect.get(), &inputLayout);
 
     // Create scratch render target for rendering views into
     D3D11_TEXTURE2D_DESC td = {};
@@ -456,7 +359,7 @@ bool Renderer::CreateSimpleOutsideInLightField(LightField* lightField)
     td.Usage = D3D11_USAGE_DEFAULT;
 
     ComPtr<ID3D11Texture2D> scratch;
-    hr = Device->CreateTexture2D(&td, nullptr, &scratch);
+    HRESULT hr = Device->CreateTexture2D(&td, nullptr, &scratch);
     if (FAILED(hr))
     {
         LogError(L"Failed to create scratch texture.");
@@ -471,32 +374,27 @@ bool Renderer::CreateSimpleOutsideInLightField(LightField* lightField)
         return false;
     }
 
-#if defined(WIREFRAME_SCENE)
-    ComPtr<ID3D11RasterizerState> rasterizerState;
-    D3D11_RASTERIZER_DESC rd = {};
-    rd.AntialiasedLineEnable = TRUE;
-    rd.CullMode = D3D11_CULL_BACK;
-    rd.FillMode = D3D11_FILL_WIREFRAME;
-    hr = Device->CreateRasterizerState(&rd, &rasterizerState);
+    D3D11_TEXTURE2D_DESC depthTd = td;
+    depthTd.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+    depthTd.Format = DXGI_FORMAT_D32_FLOAT;
+
+    ComPtr<ID3D11Texture2D> depthTex;
+    hr = Device->CreateTexture2D(&depthTd, nullptr, &depthTex);
     if (FAILED(hr))
     {
-        LogError(L"Failed to create rasterizer state.");
+        LogError(L"Failed to scratch depth texture.");
         return false;
     }
-    Context->RSSetState(rasterizerState.Get());
-#endif
 
-    // Configure the pipeline for rendering
-    static const uint32_t stride = sizeof(CubeVertex);
-    static const uint32_t offset = 0;
-    Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    Context->IASetInputLayout(inputLayout.Get());
-    Context->IASetVertexBuffers(0, 1, vb.GetAddressOf(), &stride, &offset);
-    Context->IASetIndexBuffer(ib.Get(), DXGI_FORMAT_R32_UINT, 0);
-    Context->VSSetShader(vertexShader.Get(), nullptr, 0);
-    Context->PSSetShader(pixelShader.Get(), nullptr, 0);
-    Context->VSSetConstantBuffers(0, 1, cb.GetAddressOf());
-    Context->OMSetRenderTargets(1, rtv.GetAddressOf(), nullptr);
+    ComPtr<ID3D11DepthStencilView> dsv;
+    hr = Device->CreateDepthStencilView(depthTex.Get(), nullptr, &dsv);
+    if (FAILED(hr))
+    {
+        LogError(L"Failed to scratch depth view.");
+        return false;
+    }
+
+    Context->OMSetRenderTargets(1, rtv.GetAddressOf(), dsv.Get());
 
     D3D11_VIEWPORT vp = {};
     vp.Width = (float)td.Width;
@@ -526,12 +424,12 @@ bool Renderer::CreateSimpleOutsideInLightField(LightField* lightField)
         // such that it maps the st (focal) plane fully onto the camera location
 
         float zDist = 3.f;
-        float nearZ = 2.f;
-        float farZ = 6.f;
+        float nearZ = 1.f;
+        float farZ = 4.f;
         float uvStart = -3.f;
         float uvEnd = 3.f;
-        float stStart = -1.f;
-        float stEnd = 1.f;
+        float stStart = -2.f;
+        float stEnd = 2.f;
 
         float zRatio = nearZ / zDist;
 
@@ -552,6 +450,11 @@ bool Renderer::CreateSimpleOutsideInLightField(LightField* lightField)
         XMVECTOR up = XMVectorSet(0.f, 1.f, 0.f, 0.f);
         XMVECTOR right = XMVector3Cross(up, forward);
 
+        bool wireframe = false;
+#if defined(WIREFRAME_SCENE)
+        wireframe = true;
+#endif
+
         for (int y = 0; y < 16; ++y)
         {
             float uvy = uvEnd - (uvStep * y);
@@ -560,6 +463,7 @@ bool Renderer::CreateSimpleOutsideInLightField(LightField* lightField)
             {
                 static const float clearColor[] = { 0.f, 0.f, 0.f, 1.f };
                 Context->ClearRenderTargetView(rtv.Get(), clearColor);
+                Context->ClearDepthStencilView(dsv.Get(), D3D11_CLEAR_DEPTH, 1.f, 0);
 
                 float uvx = uvStart + (uvStep * x);
 
@@ -574,12 +478,10 @@ bool Renderer::CreateSimpleOutsideInLightField(LightField* lightField)
                     forward,
                     up);
 
-                TestConstants constants;
-                XMStoreFloat4x4(&constants.ViewProjection, view * projection);
+                basicEffect->SetView(view);
+                basicEffect->SetProjection(projection);
 
-                Context->UpdateSubresource(cb.Get(), 0, nullptr, &constants, sizeof(constants), 0);
-
-                Context->DrawIndexed(_countof(indices), 0, 0);
+                obj->Draw(basicEffect.get(), inputLayout.Get(), false, wireframe);
 
                 // Copy output to the appropriate slice
                 Context->CopySubresourceRegion(sliceArray.Get(), D3D11CalcSubresource(0, y * 16 + x, 1), 0, 0, 0, scratch.Get(), 0, nullptr);
@@ -610,8 +512,6 @@ bool Renderer::CreateSimpleOutsideInLightField(LightField* lightField)
 
         lightField->LightSlabs.push_back(slab);
     }
-
-    Context->RSSetState(nullptr);
 
     return true;
 }

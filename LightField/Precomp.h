@@ -16,9 +16,11 @@
 #include <dxgi.h>
 
 // DirectXTK
-#include <Model.h>
+#include <VertexTypes.h>
 #include <GeometricPrimitive.h>
 #include <PrimitiveBatch.h>
+#include <Effects.h>
+#include <Model.h>
 
 // Fast vector math with SSE support
 #include <DirectXMath.h>
