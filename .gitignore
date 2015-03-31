@@ -60,3 +60,5 @@ CPURaytracer/x64/Debug/Raytracer.exe
 CPURaytracer/Raytracer150324.vspx
 LightField/x64/Debug/LightField.exe
 LightField/x64/Debug/LightField.exe
+LightField/x64/Debug/LightField.ilk
+*.opensdf

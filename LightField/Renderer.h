@@ -87,7 +87,6 @@ private:
     ComPtr<ID3D11Buffer> RenderQuadCB;
     ComPtr<ID3D11RenderTargetView> stRTV;
     ComPtr<ID3D11ShaderResourceView> stSRV;
-    ComPtr<ID3D11SamplerState> PointSampler;
     ComPtr<ID3D11SamplerState> LinearSampler;
     ComPtr<ID3D11Buffer> QuadVB;    // For rendering camera & focal planes
 

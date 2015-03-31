@@ -139,7 +139,13 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int)
                 //pitch += 0.05f;
             }
 
-            movement = XMVector3Normalize(movement) * 0.125f;
+            static const float speed = 0.025f;
+            movement = XMVector3Normalize(movement) * speed;
+            if (GetAsyncKeyState(VK_SHIFT) & 0x8000)
+            {
+                movement *= 5.f;
+            }
+
             cameraPosition += movement;
 
             // Keep the camera at least 4 units from the center to avoid clipping into the light field. Only in xz plane

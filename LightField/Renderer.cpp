@@ -6,6 +6,7 @@
 #include "RenderUVPlanePS.h"
 
 //#define WIREFRAME_SCENE
+//#define USE_MIPS
 
 std::unique_ptr<Renderer> Renderer::Create(HWND window)
 {
@@ -48,6 +49,8 @@ bool Renderer::Render(FXMMATRIX cameraView, FXMMATRIX cameraProjection, bool vsy
 
     Context->RSSetViewports(1, &RenderVP);
 
+    Context->PSSetSamplers(0, 1, LinearSampler.GetAddressOf());
+
     static const uint32_t stride = sizeof(SlabVertex);
     static const uint32_t offset = 0;
     Context->IASetVertexBuffers(0, 1, QuadVB.GetAddressOf(), &stride, &offset);
@@ -82,9 +85,6 @@ bool Renderer::Render(FXMMATRIX cameraView, FXMMATRIX cameraProjection, bool vsy
 
         ID3D11ShaderResourceView* srvs[] = { stSRV.Get(), slab.Slices.Get() };
         Context->PSSetShaderResources(0, _countof(srvs), srvs);
-
-        ID3D11SamplerState* samplers[] = { PointSampler.Get(), LinearSampler.Get() };
-        Context->PSSetSamplers(0, _countof(samplers), samplers);
 
         XMStoreFloat4x4(&constants.World, XMLoadFloat4x4(&slab.uvQuadWorld));
 
@@ -274,16 +274,10 @@ bool Renderer::Initialize()
     sd.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
     sd.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
     sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
-    sd.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
-
-    hr = Device->CreateSamplerState(&sd, &PointSampler);
-    if (FAILED(hr))
-    {
-        LogError(L"Failed to create sampler.");
-        return false;
-    }
-
     sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+#if defined(USE_MIPS)
+    sd.MaxLOD = 10;
+#endif
 
     hr = Device->CreateSamplerState(&sd, &LinearSampler);
     if (FAILED(hr))
@@ -436,7 +430,17 @@ bool Renderer::CreateSimpleOutsideInLightField(LightField* lightField)
         float uvStep = (uvEnd - uvStart) / 15.f;
 
         td.ArraySize = 16 * 16;
-        td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        td.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+        td.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
+
+        int numMips = 1;
+        int w = td.Width;
+        while (w != 1)
+        {
+            ++numMips;
+            w >>= 1;
+        }
+        td.MipLevels = numMips;
 
         ComPtr<ID3D11Texture2D> sliceArray;
         hr = Device->CreateTexture2D(&td, nullptr, &sliceArray);
@@ -484,7 +488,7 @@ bool Renderer::CreateSimpleOutsideInLightField(LightField* lightField)
                 obj->Draw(basicEffect.get(), inputLayout.Get(), false, wireframe);
 
                 // Copy output to the appropriate slice
-                Context->CopySubresourceRegion(sliceArray.Get(), D3D11CalcSubresource(0, y * 16 + x, 1), 0, 0, 0, scratch.Get(), 0, nullptr);
+                Context->CopySubresourceRegion(sliceArray.Get(), D3D11CalcSubresource(0, y * 16 + x, numMips), 0, 0, 0, scratch.Get(), 0, nullptr);
             }
         }
 
@@ -494,6 +498,8 @@ bool Renderer::CreateSimpleOutsideInLightField(LightField* lightField)
             LogError(L"Failed to create light slab srv.");
             return false;
         }
+
+        Context->GenerateMips(slab.Slices.Get());
 
         // Store the 2 world matrices of the slab planes
         XMMATRIX worldMatrix;
