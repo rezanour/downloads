@@ -22,4 +22,4 @@ using namespace DirectX;
 #include <wrl.h>
 using namespace Microsoft::WRL;
 
-#include "DirectXTex\DirectXTex\DirectXTex.h"
+#include "DirectXTex\DirectXTex.h"

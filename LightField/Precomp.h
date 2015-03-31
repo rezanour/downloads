@@ -15,8 +15,10 @@
 #include <d3d11.h>
 #include <dxgi.h>
 
-// WIC - image decoding
-#include <wincodec.h>
+// DirectXTK
+#include <Model.h>
+#include <GeometricPrimitive.h>
+#include <PrimitiveBatch.h>
 
 // Fast vector math with SSE support
 #include <DirectXMath.h>
