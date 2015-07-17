@@ -5,34 +5,50 @@
 
 namespace rzlib
 {
-    // Should be stripped out in release builds (inlined empty function)
     struct no_byte_swap
     {
         template <typename IntType>
-        static void swap(IntType& input)
+        static IntType swap(IntType input)
         {
             static_assert(
                 std::is_unsigned<IntType>::value && std::is_integral<IntType>::value,
                 "byte swap only supports unsigned integral types");
+
+            return input;
         }
     };
 
     struct big_endian_byte_swap
     {
-        template <typename IntType>
-        static void swap(IntType& input)
+        template <typename IntType = uint64_t>
+        static uint64_t swap(uint64_t input)
         {
-            static_assert(
-                std::is_unsigned<IntType>::value && std::is_integral<IntType>::value && sizeof(IntType) > 1,
-                "byte swap only supports unsigned integral types greater than 1 byte");
+            return _byteswap_uint64(input);
+        }
 
-            uint8_t* p = reinterpret_cast<uint8_t*>(&input);
-            for (int i = 0; i < sizeof(IntType) / 2; ++i)
-            {
-                uint8_t temp = p[i];
-                p[i] = p[sizeof(IntType) - 1 - i];
-                p[sizeof(IntType) - 1 - i] = temp;
-            }
+        template <typename IntType = uint32_t>
+        static uint32_t swap(uint32_t input)
+        {
+            return _byteswap_ulong(input);
+        }
+
+        template <typename IntType = uint16_t>
+        static uint16_t swap(uint16_t input)
+        {
+            return _byteswap_ushort(input);
+        }
+
+        template <typename IntType = uint8_t>
+        static uint8_t swap(uint8_t input)
+        {
+            return input;
+        }
+
+        template <typename IntType>
+        static IntType swap(IntType input)
+        {
+            static_assert(false, "byte swap only supports unsigned integral types");
+            return 0;
         }
     };
 
@@ -40,23 +56,26 @@ namespace rzlib
     struct no_masking
     {
         template <typename IntType>
-        static void mask(IntType& input, int num_bits)
+        static IntType mask(IntType input, int num_bits)
         {
             static_assert(
                 std::is_unsigned<IntType>::value && std::is_integral<IntType>::value,
                 "masking only supports unsigned integral types");
+
+            return input;
         }
     };
 
     struct bit_masking
     {
         template <typename IntType>
-        static void mask(IntType& input, int num_bits)
+        static IntType mask(IntType input, int num_bits)
         {
             static_assert(
                 std::is_unsigned<IntType>::value && std::is_integral<IntType>::value,
                 "masking only supports unsigned integral types");
-            input = input & ((1 << num_bits) - 1);
+
+            return input & ((1 << num_bits) - 1);
         }
     };
 
@@ -67,8 +86,7 @@ namespace rzlib
         bitstream(const TBlock* source, size_t num_blocks)
             : source(source), pCurrent(source), num_blocks(num_blocks), num_bits_per_block(sizeof(TBlock) * 8)
         {
-            current = *pCurrent;
-            TByte_Swap::swap(current);
+            current = TByte_Swap::swap(*pCurrent);
             remaining_bits_this_block = num_bits_per_block;
         }
 
@@ -94,14 +112,18 @@ namespace rzlib
                 *result = current << num_bits_from_first_block;
 
                 // Read in new block
-                current = *(++pCurrent);
-                TByte_Swap::swap(current);
+                current = TByte_Swap::swap(*(++pCurrent));
+                if (pCurrent - source == num_blocks && num_bits > remaining_bits_this_block)
+                {
+                    // reading past end of stream
+                    return false;
+                }
 
                 remaining_bits_this_block = num_bits_per_block - num_bits_from_first_block;
                 *result |= current >> remaining_bits_this_block;
             }
 
-            TMask::mask(*result, num_bits);
+            *result = TMask::mask(*result, num_bits);
 
             return true;
         }
