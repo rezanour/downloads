@@ -22,6 +22,7 @@
     <ClInclude Include="rzlib_common.h" />
     <ClInclude Include="rzlib_error.h" />
     <ClInclude Include="rzlib_bitstream.h" />
+    <ClInclude Include="rzlib_huffman.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{087B778D-7C28-4423-9BE9-3FC0CDAB49A6}</ProjectGuid>

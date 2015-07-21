@@ -24,5 +24,8 @@
     <ClInclude Include="rzlib_bitstream.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="rzlib_huffman.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
