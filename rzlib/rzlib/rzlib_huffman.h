@@ -3,6 +3,7 @@
 #include "rzlib_bitstream.h"
 #include <vector>
 #include <deque>
+#include <map>
 #include <algorithm>
 
 namespace rzlib
@@ -22,62 +23,87 @@ namespace rzlib
     } // namespace details_
 
     template <typename TData>
-    struct huffman_symbol
+    struct huffman_symbol_info
     {
-        TData data;
-        int frequency;
+        int32_t num_bits;
+        uint32_t bits;
     };
 
     template <typename TData>
     class huffman_encoder
     {
     public:
-        huffman_encoder(){}
-        ~huffman_encoder(){}
-
-        bool encode(const std::vector<huffman_symbol<TData>>& symbols)
+        struct symbol
         {
-            std::deque<node> list;
-            std::vector<node> the_nodes;
+            TData data;
+            int32_t frequency;
+        };
+
+        huffman_encoder(const std::vector<symbol>& symbols)
+        {
+            std::deque<node*> list;
 
             for (auto& symbol : symbols)
             {
-                list.push_back({ symbol.frequency, false, symbol.data, { -1 , -1 } });
+                list.push_back(new node { symbol.frequency, nullptr, false, symbol.data });
             }
 
-            auto less_than = [](const node& a, const node& b)
-            { return a.frequency < b.frequency; };
+            auto less_than = [](const node* a, const node* b)
+            { return a->frequency < b->frequency; };
 
             std::sort(list.begin(), list.end(), less_than);
 
             while (list.size() > 1)
             {
                 // Remove two lowest entries
-                node a = list.front();
+                node* a = list.front();
                 list.pop_front();
-                node b = list.front();
+                node* b = list.front();
                 list.pop_front();
 
-                int child[2]{a.index, b.index};
-                if (!a.is_node)
-                {
-                    child[0] = (int)the_nodes.size();
-                    the_nodes.push_back(a);
-                }
-                if (!b.is_node)
-                {
-                    child[1] = (int)the_nodes.size();
-                    the_nodes.push_back(b);
-                }
+                node* parent = new node;
+                parent->frequency = a->frequency + b->frequency;
+                parent->parent = nullptr;
+                parent->is_node = true;
+                parent->child[0] = a;
+                parent->child[1] = b;
+                a->parent = parent;
+                b->parent = parent;
 
-                node parent{ a.frequency + b.frequency, true, (int)the_nodes.size(), { child[0], child[1] } };
-                the_nodes.push_back(parent);
                 list.emplace(std::lower_bound(list.begin(), list.end(), parent, less_than), parent);
             }
 
-            nodes.clear();
-            store_node(the_nodes, list.front().index);
+            store_node(list.front(), 0, 0);
 
+            std::vector<node*> del;
+            del.push_back(list.front());
+            while (!del.empty())
+            {
+                node* n = del.back();
+                del.pop_back();
+
+                if (n->is_node)
+                {
+                    del.push_back(n->child[0]);
+                    del.push_back(n->child[1]);
+                }
+
+                delete n;
+            }
+        }
+
+        template <typename TBlock>
+        bool encode(bitstream_writer<TBlock>& stream, const TData* data, size_t num_elements)
+        {
+            for (size_t i = 0; i < num_elements; ++i)
+            {
+                auto it = lookup.find(data[i]);
+                if (it == lookup.end())
+                {
+                    return false;
+                }
+                stream.write_bits(it->second.num_bits, it->second.bits);
+            }
             return true;
         }
 
@@ -88,32 +114,42 @@ namespace rzlib
     private:
         struct node
         {
-            int frequency;
+            int32_t frequency;
+            node* parent;
             bool is_node;
             union
             {
                 TData data;
-                int index;
+                node* child[2];
             };
-            int child[2];
         };
 
-        int store_node(const std::vector<node>& the_nodes, int index)
+        int32_t store_node(node* n, int32_t num_bits, uint32_t bits)
         {
-            auto& n = the_nodes[index];
-            if (n.is_node)
+            if (n->is_node)
             {
-                nodes.push_back({ { store_node(the_nodes, n.child[0]), store_node(the_nodes, n.child[1]) } });
-                return (int)nodes.size() - 1;
+                // reserve our space
+                int32_t i = (int32_t)nodes.size();
+                nodes.push_back({});
+
+                int32_t l = store_node(n->child[0], num_bits + 1, (bits << 1) | 0);
+                int32_t r = store_node(n->child[1], num_bits + 1, (bits << 1) | 1);
+                nodes[i].child[0] = l;
+                nodes[i].child[1] = r;
+
+                return i;
             }
             else
             {
-                nodes.push_back({ n.data });
-                return -((int)nodes.size() - 1);
+                nodes.push_back({ n->data });
+                lookup[n->data].num_bits = num_bits;
+                lookup[n->data].bits = bits;
+                return (int32_t)nodes.size() - 1;
             }
         }
 
         std::vector<details_::huffman_node<TData>> nodes;
+        std::map<TData, huffman_symbol_info<TData>> lookup;
     };
 
     template <typename TData>
@@ -124,49 +160,8 @@ namespace rzlib
         {
         }
 
-        ~huffman_decoder()
-        {
-        }
-
-        //bool add_symbol(uint32_t num_bits, uint32_t bits, TData symbol)
-        //{
-        //    assert(num_bits < sizeof(bits) * 8);
-        //    int32_t node = 0;
-        //    while (num_bits--)
-        //    {
-        //        uint32_t nextBit = bits & 0x1;
-        //        bits >>= 1;
-
-        //        int32_t nextNode = nodes[node].child[nextBit];
-        //        if (nextNode == 0)
-        //        {
-        //            // no node yet in this direction. create one now
-        //            details_::huffman_node<TData> aNode;
-        //            if (num_bits == 0)
-        //            {
-        //                // leaf
-        //                aNode.data = symbol;
-        //                nodes.push_back(aNode);
-        //                nodes[node].child[nextBit] = nextNode = -(int32_t)(nodes.size() - 1);
-        //            }
-        //            else
-        //            {
-        //                // inner node
-        //                aNode.child[0] = 0;
-        //                aNode.child[1] = 0;
-        //                nodes.push_back(aNode);
-        //                nodes[node].child[nextBit] = nextNode = (int32_t)(nodes.size() - 1);
-        //            }
-        //        }
-
-        //        // existing node, move on down
-        //        node = nextNode;
-        //    }
-        //    return true;
-        //}
-
         template <typename TBlock, typename byte_swap, typename masking>
-        bool decode_next(bitstream<TBlock, byte_swap, masking>& stream, TData* result)
+        bool decode_next(bitstream_reader<TBlock, byte_swap, masking>& stream, TData* result)
         {
             if (nodes.empty())
             {

@@ -2,6 +2,7 @@
 
 #include "rzlib_common.h"
 #include <type_traits>
+#include <vector>
 
 namespace rzlib
 {
@@ -79,14 +80,42 @@ namespace rzlib
         }
     };
 
+    template<typename TBlock>
+    class bitstream_writer;
+
     template <typename TBlock, typename TByte_Swap = no_byte_swap, typename TMask = no_masking>
-    class bitstream
+    class bitstream_reader
     {
     public:
-        bitstream(const TBlock* source, size_t num_blocks)
-            : source(source), pCurrent(source), num_blocks(num_blocks), num_bits_per_block(sizeof(TBlock) * 8)
+        bitstream_reader(const TBlock* source, size_t num_blocks)
+            : data(num_blocks), num_bits_per_block(sizeof(TBlock) * 8)
         {
-            current = TByte_Swap::swap(*pCurrent);
+            // Push in data backwards, so we can pop from the back
+            // which is more efficient
+            for (size_t i = 0; i < num_blocks; ++i)
+            {
+                data[num_blocks - i - 1] = source[i];
+            }
+
+            current = TByte_Swap::swap(data.back());
+            data.pop_back();
+
+            remaining_bits_this_block = num_bits_per_block;
+        }
+
+        bitstream_reader(const bitstream_writer<TBlock>& writer)
+            : data(writer.data.size()), num_bits_per_block(writer.num_bits_per_block)
+        {
+            // Push in data backwards, so we can pop from the back
+            // which is more efficient
+            for (size_t i = 0; i < data.size(); ++i)
+            {
+                data[data.size() - i - 1] = writer.data[i];
+            }
+
+            current = TByte_Swap::swap(data.back());
+            data.pop_back();
+
             remaining_bits_this_block = num_bits_per_block;
         }
 
@@ -95,12 +124,6 @@ namespace rzlib
         {
             assert(sizeof(TResult) * 8 >= num_bits);
 
-            if (pCurrent - source == num_blocks)
-            {
-                // stream empty
-                return false;
-            }
-
             if (remaining_bits_this_block > num_bits)
             {
                 *result = current >> (remaining_bits_this_block - num_bits);
@@ -108,18 +131,22 @@ namespace rzlib
             }
             else
             {
-                int num_bits_from_first_block = num_bits - remaining_bits_this_block;
-                *result = current << num_bits_from_first_block;
-
-                // Read in new block
-                current = TByte_Swap::swap(*(++pCurrent));
-                if (pCurrent - source == num_blocks && num_bits > remaining_bits_this_block)
+                // We're going to need to pull another block, do we have data?
+                int num_bits_left_over = num_bits - remaining_bits_this_block;
+                if (num_bits_left_over / num_bits_per_block + 1 > (int)data.size())
                 {
                     // reading past end of stream
                     return false;
                 }
 
-                remaining_bits_this_block = num_bits_per_block - num_bits_from_first_block;
+                // TODO: doesn't handle case where we're requesting more bits than num_bits_per_block
+                *result = current << num_bits_left_over;
+
+                // Read in new block
+                current = TByte_Swap::swap(data.back());
+                data.pop_back();
+
+                remaining_bits_this_block = num_bits_per_block - num_bits_left_over;
                 *result |= current >> remaining_bits_this_block;
             }
 
@@ -129,14 +156,62 @@ namespace rzlib
         }
 
     private:
-        bitstream(const bitstream&) = delete;
-        bitstream& operator= (const bitstream&) = delete;
+        bitstream_reader(const bitstream_reader&) = delete;
+        bitstream_reader& operator= (const bitstream_reader&) = delete;
 
     private:
-        const TBlock* source;
-        const TBlock* pCurrent;
+        std::vector<TBlock> data;
         TBlock current;
-        size_t num_blocks;
+        size_t num_bits_per_block;
+        int remaining_bits_this_block;
+    };
+
+    template <typename TBlock>
+    class bitstream_writer
+    {
+    public:
+        bitstream_writer()
+            : num_bits_per_block(sizeof(TBlock) * 8)
+        {
+            data.push_back(TBlock(0));
+            pCurrent = &data[0];
+            remaining_bits_this_block = num_bits_per_block;
+        }
+
+        template <typename TData>
+        void write_bits(int num_bits, TData result)
+        {
+            assert(sizeof(TData) * 8 >= num_bits);
+
+            if (remaining_bits_this_block > num_bits)
+            {
+                *pCurrent |= bit_masking::mask(result, num_bits) << (remaining_bits_this_block - num_bits);
+                remaining_bits_this_block -= num_bits;
+            }
+            else
+            {
+                int num_bits_left_over = num_bits - remaining_bits_this_block;
+                *pCurrent |= bit_masking::mask(result >> num_bits_left_over, remaining_bits_this_block);
+
+                // Start a new block
+                data.push_back(TBlock(0));
+                pCurrent = &data[data.size() - 1];
+
+                remaining_bits_this_block = num_bits_per_block - num_bits_left_over;
+                *pCurrent |= bit_masking::mask(result, num_bits_left_over);
+            }
+        }
+
+    private:
+        bitstream_writer(const bitstream_writer&) = delete;
+        bitstream_writer& operator= (const bitstream_writer&) = delete;
+
+    private:
+        template <typename TData, typename TByteSwap, typename TMasking>
+        friend class bitstream_reader;
+
+        std::vector<TBlock> data;
+        TBlock* pCurrent;
         size_t num_bits_per_block;
         int remaining_bits_this_block;
     };
