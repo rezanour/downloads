@@ -117,7 +117,14 @@ namespace rzlib
             current = TByte_Swap::swap(data.back());
             data.pop_back();
 
-            remaining_bits_this_block = num_bits_per_block;
+            if (data.empty())
+            {
+                remaining_bits_this_block = bits_used_in_last_block;
+            }
+            else
+            {
+                remaining_bits_this_block = num_bits_per_block;
+            }
         }
 
         template <typename TResult>

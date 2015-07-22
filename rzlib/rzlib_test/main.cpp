@@ -31,13 +31,13 @@ int main(int num_args, char* args[])
     symbols.push_back({ 'd', 1 });
     huffman_encoder<char> encoder(symbols);
 
-    bitstream_writer<uint8_t> encoded_stream;
+    bitstream_writer<uint32_t> encoded_stream;
     if (!encoder.encode(encoded_stream, message, _countof(message)))
     {
         printf("Encoding failed.\n");
     }
 
-    bitstream_reader<uint8_t> stream_reader(encoded_stream);
+    bitstream_reader<uint32_t> stream_reader(encoded_stream);
 
     huffman_decoder<char> decoder(encoder);
     char nextChar = 0;
