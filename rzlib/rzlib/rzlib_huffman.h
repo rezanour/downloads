@@ -126,10 +126,11 @@ namespace rzlib
 
         int32_t store_node(node* n, int32_t num_bits, uint32_t bits)
         {
+            // reserve our space
+            int32_t i = (int32_t)nodes.size();
+
             if (n->is_node)
             {
-                // reserve our space
-                int32_t i = (int32_t)nodes.size();
                 nodes.push_back({});
 
                 int32_t l = store_node(n->child[0], num_bits + 1, (bits << 1) | 0);
@@ -144,9 +145,12 @@ namespace rzlib
                 nodes.push_back({ n->data });
                 lookup[n->data].num_bits = num_bits;
                 lookup[n->data].bits = bits;
-                return (int32_t)nodes.size() - 1;
+                return -i;
             }
         }
+
+        template <typename TData>
+        friend class huffman_decoder;
 
         std::vector<details_::huffman_node<TData>> nodes;
         std::map<TData, huffman_symbol_info<TData>> lookup;
@@ -156,19 +160,14 @@ namespace rzlib
     class huffman_decoder
     {
     public:
-        huffman_decoder()
+        huffman_decoder(const huffman_encoder<TData>& encoder)
+            : nodes(encoder.nodes)
         {
         }
 
         template <typename TBlock, typename byte_swap, typename masking>
         bool decode_next(bitstream_reader<TBlock, byte_swap, masking>& stream, TData* result)
         {
-            if (nodes.empty())
-            {
-                assert(false);
-                return false;
-            }
-
             uint32_t bits = 0;
             int32_t node = 0;
             do
@@ -178,7 +177,7 @@ namespace rzlib
                     return false;
                 }
 
-                node = nodes[node].child[bits];
+                node = nodes[node].child[bits & 0x1];
 
                 if (node == 0)
                 {

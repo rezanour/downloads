@@ -32,22 +32,20 @@ int main(int num_args, char* args[])
     huffman_encoder<char> encoder(symbols);
 
     bitstream_writer<uint8_t> encoded_stream;
-    if (!encoder.encode(encoded_stream, "Hello, World", 12))
+    if (!encoder.encode(encoded_stream, message, _countof(message)))
     {
         printf("Encoding failed.\n");
     }
 
     bitstream_reader<uint8_t> stream_reader(encoded_stream);
 
-    huffman_decoder<char> decoder;
-
-    //bitstream<uint32_t, no_byte_swap, no_masking> test_stream2(encoded_data, ARRAY_SIZE(encoded_data));;
-    //char nextChar = 0;
-    //while (decoder.decode_next(test_stream2, &nextChar))
-    //{
-    //    printf("%c", nextChar);
-    //}
-    //printf("\n");
+    huffman_decoder<char> decoder(encoder);
+    char nextChar = 0;
+    while (decoder.decode_next(stream_reader, &nextChar))
+    {
+        printf("%c", nextChar);
+    }
+    printf("\n");
 
     return 0;
 }

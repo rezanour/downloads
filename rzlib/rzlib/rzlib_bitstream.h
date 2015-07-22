@@ -105,6 +105,7 @@ namespace rzlib
 
         bitstream_reader(const bitstream_writer<TBlock>& writer)
             : data(writer.data.size()), num_bits_per_block(writer.num_bits_per_block)
+            , bits_used_in_last_block(writer.num_bits_per_block - writer.remaining_bits_this_block)
         {
             // Push in data backwards, so we can pop from the back
             // which is more efficient
@@ -146,7 +147,14 @@ namespace rzlib
                 current = TByte_Swap::swap(data.back());
                 data.pop_back();
 
-                remaining_bits_this_block = num_bits_per_block - num_bits_left_over;
+                if (data.empty())
+                {
+                    remaining_bits_this_block = bits_used_in_last_block - num_bits_left_over;
+                }
+                else
+                {
+                    remaining_bits_this_block = num_bits_per_block - num_bits_left_over;
+                }
                 *result |= current >> remaining_bits_this_block;
             }
 
@@ -164,6 +172,7 @@ namespace rzlib
         TBlock current;
         size_t num_bits_per_block;
         int remaining_bits_this_block;
+        int bits_used_in_last_block;
     };
 
     template <typename TBlock>
@@ -179,26 +188,26 @@ namespace rzlib
         }
 
         template <typename TData>
-        void write_bits(int num_bits, TData result)
+        void write_bits(int num_bits, TData bits)
         {
             assert(sizeof(TData) * 8 >= num_bits);
 
             if (remaining_bits_this_block > num_bits)
             {
-                *pCurrent |= bit_masking::mask(result, num_bits) << (remaining_bits_this_block - num_bits);
+                *pCurrent |= bit_masking::mask(bits, num_bits) << (remaining_bits_this_block - num_bits);
                 remaining_bits_this_block -= num_bits;
             }
             else
             {
                 int num_bits_left_over = num_bits - remaining_bits_this_block;
-                *pCurrent |= bit_masking::mask(result >> num_bits_left_over, remaining_bits_this_block);
+                *pCurrent |= bit_masking::mask(bits >> num_bits_left_over, remaining_bits_this_block);
 
                 // Start a new block
                 data.push_back(TBlock(0));
                 pCurrent = &data[data.size() - 1];
 
                 remaining_bits_this_block = num_bits_per_block - num_bits_left_over;
-                *pCurrent |= bit_masking::mask(result, num_bits_left_over);
+                *pCurrent |= bit_masking::mask(bits, num_bits_left_over);
             }
         }
 
