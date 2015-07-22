@@ -18,9 +18,6 @@
     <ClInclude Include="rzlib_common.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="rzlib_error.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="rzlib_bitstream.h">
       <Filter>Header Files</Filter>
     </ClInclude>

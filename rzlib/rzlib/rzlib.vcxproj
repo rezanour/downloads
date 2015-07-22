@@ -20,7 +20,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="rzlib_common.h" />
-    <ClInclude Include="rzlib_error.h" />
     <ClInclude Include="rzlib_bitstream.h" />
     <ClInclude Include="rzlib_huffman.h" />
   </ItemGroup>
