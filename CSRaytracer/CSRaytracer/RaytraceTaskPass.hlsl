@@ -5,13 +5,11 @@
 
 #include "ShaderCommon.hlsli"
 
-StructuredBuffer<Vertex> Vertices;
-StructuredBuffer<Triangle> Triangles;
 StructuredBuffer<AabbNode> Nodes;
-StructuredBuffer<Object> Objects;
-RWStructuredBuffer<Task> Tasks;
-RWTexture2D<int> TaskHead;
+
 RWTexture2D<float4> RenderTarget;
+RWTexture2D<int> TaskHead;
+RWStructuredBuffer<Task> Tasks;
 
 //==============================================================================
 // Main entry point
@@ -46,7 +44,7 @@ void main(
 
     // Use camera position as ray start position
     float3 rayStart = CameraWorldTransform._m03_m13_m23;
-
+        
     // Process task
     Task t = Tasks[iTask];
 
@@ -67,13 +65,12 @@ void main(
             t.Node = node.LeftIndex;
             t.Next = -1;
             uint i = Tasks.IncrementCounter();
-            Tasks[i] = t;
             int iNext = TaskHead[pixelCoord];
             if (iNext >= 0)
             {
                 t.Next = iNext;
-                TaskHead[pixelCoord] = i;
             }
+            Tasks[i] = t;
             TaskHead[pixelCoord] = i;
         }
         if (RayAabbIntersect(rayStart, rayDir, node.RightMin, node.RightMax))
@@ -82,21 +79,19 @@ void main(
             t.Node = node.RightIndex;
             t.Next = -1;
             uint i = Tasks.IncrementCounter();
-            Tasks[i] = t;
             int iNext = TaskHead[pixelCoord];
             if (iNext >= 0)
             {
                 t.Next = iNext;
-                TaskHead[pixelCoord] = i;
             }
+            Tasks[i] = t;
             TaskHead[pixelCoord] = i;
         }
     }
     else
     {
-        // It's an object
-        Object object = Objects[-(t.Node + 1)];
-
         // TODO: intersect with object and update RenderTarget[pixelCoord].
+        // For now, we'll just assume that each leaf object is just a filled in solid AABB
+        RenderTarget[pixelCoord] = float4(abs(rayDir), 1);
     }
 }

@@ -6,8 +6,9 @@
 #include "ShaderCommon.hlsli"
 
 StructuredBuffer<AabbNode> Nodes;
-RWStructuredBuffer<Task> Tasks;
+
 RWTexture2D<int> TaskHead;
+RWStructuredBuffer<Task> Tasks;
 
 //==============================================================================
 // Main entry point
@@ -38,19 +39,14 @@ void main(
     // If no hit, we're done.
     // If either side hits, append to Tasks list and update head index for this pixel
     AabbNode node = Nodes[0];
+    uint i = 0xffff;
     if (RayAabbIntersect(rayStart, rayDir, node.LeftMin, node.LeftMax))
     {
         Task t;
         t.Node = node.LeftIndex;
         t.Next = -1;
-        uint i = Tasks.IncrementCounter();
+        i = Tasks.IncrementCounter();
         Tasks[i] = t;
-        int iNext = TaskHead[pixelCoord];
-        if (iNext >= 0)
-        {
-            t.Next = iNext;
-            TaskHead[pixelCoord] = i;
-        }
         TaskHead[pixelCoord] = i;
     }
     if (RayAabbIntersect(rayStart, rayDir, node.RightMin, node.RightMax))
@@ -58,14 +54,12 @@ void main(
         Task t;
         t.Node = node.RightIndex;
         t.Next = -1;
-        uint i = Tasks.IncrementCounter();
-        Tasks[i] = t;
-        int iNext = TaskHead[pixelCoord];
-        if (iNext >= 0)
+        uint j = Tasks.IncrementCounter();
+        if (i != 0xffff)
         {
-            t.Next = iNext;
-            TaskHead[pixelCoord] = i;
+            t.Next = i;
         }
-        TaskHead[pixelCoord] = i;
+        Tasks[j] = t;
+        TaskHead[pixelCoord] = j;
     }
 }

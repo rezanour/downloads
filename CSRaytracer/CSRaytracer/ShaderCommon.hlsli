@@ -15,27 +15,6 @@ cbuffer CameraData
     float DistToProjPlane;
 };
 
-// Common vertex type
-struct Vertex
-{
-    float3 Position;
-    float3 Normal;
-    float3 Color;
-};
-
-// Indices of a triangle
-struct Triangle
-{
-    int Vertices[3];
-};
-
-// An object descriptor
-struct Object
-{
-    int NumTriangles;
-    int FirstTriangle;
-};
-
 // A node in the AABB bounding volume hierarchy
 struct AabbNode
 {
