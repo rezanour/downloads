@@ -59,7 +59,10 @@ CPURaytracer/x64/Release/Raytracer.exe
 CPURaytracer/x64/Debug/Raytracer.exe
 CPURaytracer/Raytracer150324.vspx
 LightField/x64/Debug/LightField.exe
-LightField/x64/Debug/LightField.exe
 LightField/x64/Debug/LightField.ilk
+CSRaytracer/x64/Debug/CSRaytracer.exe
+CSRaytracer/x64/Debug/CSRaytracer.ilk
+CSRaytracer/x64/
+CSRaytracer/CSRaytracer/x64/
 *.opensdf
 *.user
